@@ -7,16 +7,28 @@ async def create_pool(loop,**kw):
     logging.info('create database connection pool...')
     global __pool
     __pool = await aiomysql.create_pool(
-        host=kw.get('host','localhost'),
-        port=kw.get('port','3306'),
+        host=kw.get('host','127.0.0.1'),
+        port=kw.get('port',3306),
         user=kw['user'],
         password=kw['password'],
         db=kw['db'],
-        charset=kw.get('autocommit',True),
+        charset=kw.get('charset', 'utf8'),
+        autocommit=kw.get('autocommit',True),
         maxsize=kw.get('maxsize',10),
         minsize=kw.get('minsize',1),
         loop=loop
     )
+
+async def destroy_pool():
+    #声明全局变量
+    global __pool
+    #如果__pool 不为空
+    if __pool is not None:
+        #关闭__pool
+        __pool.close()
+        #异步调用__pool.wait_closed(), wait_closed()用于等待直到 close()方法完成
+        await __pool.wait_closed()
+
 async def select(sql, args, size=None):
     log(sql,args)
     global __pool
@@ -36,7 +48,7 @@ async  def execute(sql,args,autocommit=True):
             await conn.begin()
         try:
             async with conn.cursor(aiomysql.DictCursor) as cur:
-                await cur.execute(sql.replace('?','%s'),args)
+                await cur.execute(sql.replace('?', '%s'), args)
                 affected = cur.rowcount
             if not autocommit:
                 await conn.commit()
@@ -96,7 +108,7 @@ class ModelMetaClass(type):
         mappings=dict()
         fields=[]
         primaryKey=None
-        for k,v in attrs.item():
+        for k,v in attrs.items():
             if isinstance(v,Field):
                 logging.info('    found mapping: %s ==> %s' % (k,v))
                 mappings[k]=v
@@ -123,7 +135,7 @@ class ModelMetaClass(type):
         attrs['__delete__'] = 'delete from `%s` where `%s`=?' % (tableName, primaryKey)
         return type.__new__(cls,name,bases,attrs)
 
-class Model(dict, metaclass=ModelMetaclass):
+class Model(dict, metaclass=ModelMetaClass):
 
     def __init__(self, **kw):
         super(Model, self).__init__(**kw)
